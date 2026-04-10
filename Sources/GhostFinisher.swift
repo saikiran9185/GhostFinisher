@@ -14,9 +14,14 @@ var ghostDictionary: [String] = [
 ]
 
 // MARK: - State
-var wordBuffer = ""
-var isEnabled  = true
+var wordBuffer  = ""
+var isEnabled   = true
 var eventTap: CFMachPort?
+
+// Unique marker stamped onto every event we inject ourselves.
+// The tap checks this and skips injected events so they never
+// corrupt the word buffer or trigger new suggestions.
+let GHOST_INJECTION_MARKER: Int64 = 0x47484F5354  // "GHOST" in hex
 
 // MARK: - Match Result
 // Tells the UI which display mode to use
@@ -229,11 +234,18 @@ func injectCompletion(word: String, deleteCount: Int) {
     }
 }
 
+// Private source used for all injected events.
+// Events from this source are stamped with GHOST_INJECTION_MARKER
+// so the tap can tell them apart from real user keystrokes.
+let injectionSource = CGEventSource(stateID: .combinedSessionState)
+
 func postKey(keyCode: CGKeyCode, shift: Bool) {
-    if shift { CGEvent(keyboardEventSource: nil, virtualKey: 56, keyDown: true)?.post(tap: .cghidEventTap) }
-    CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true)?.post(tap: .cghidEventTap)
-    CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false)?.post(tap: .cghidEventTap)
-    if shift { CGEvent(keyboardEventSource: nil, virtualKey: 56, keyDown: false)?.post(tap: .cghidEventTap) }
+    func stamp(_ e: CGEvent?) { e?.setIntegerValueField(.eventSourceUserData, value: GHOST_INJECTION_MARKER) }
+    func post(_ e: CGEvent?)  { stamp(e); e?.post(tap: .cghidEventTap) }
+    if shift { post(CGEvent(keyboardEventSource: injectionSource, virtualKey: 56, keyDown: true)) }
+    post(CGEvent(keyboardEventSource: injectionSource, virtualKey: keyCode, keyDown: true))
+    post(CGEvent(keyboardEventSource: injectionSource, virtualKey: keyCode, keyDown: false))
+    if shift { post(CGEvent(keyboardEventSource: injectionSource, virtualKey: 56, keyDown: false)) }
 }
 
 // MARK: - Show suggestion (called on main thread)
@@ -318,6 +330,12 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
         return Unmanaged.passRetained(event)
     }
     guard type == .keyDown else { return Unmanaged.passRetained(event) }
+
+    // Skip events we injected ourselves — prevents the buffer from eating
+    // the letters we type after a Tab completion (the root Notes bug).
+    if event.getIntegerValueField(.eventSourceUserData) == GHOST_INJECTION_MARKER {
+        return Unmanaged.passRetained(event)
+    }
 
     let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
     let flags   = event.flags
