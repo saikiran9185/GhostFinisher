@@ -148,9 +148,10 @@ func autoCorrectCandidate(for input: String) -> String? {
         let d = editDistance(lower, word, cap: 2)
         if d < bestDist { bestDist = d; bestWord = word }
     }
-    // Only auto-correct distance 1 (very confident) without prompt
-    // Distance 2 still shows badge suggestion but doesn't auto-apply
-    if let w = bestWord, bestDist == 1 { return w }
+    // Auto-correct both distance 1 AND distance 2
+    // Distance 1: "wroking" → "working"   (1 transposition)
+    // Distance 2: "buetiful" → "beautiful" (2 edits)
+    if let w = bestWord, bestDist <= 2 { return w }
     return nil
 }
 
@@ -280,25 +281,27 @@ class GhostWindow: NSPanel {
         orderFront(nil)
     }
 
-    // Badge — used for spell/fuzzy suggestions and auto-correct confirmations
-    func showBadge(text: NSAttributedString, autoDismiss: TimeInterval? = nil) {
+    // Badge — suggestions, corrections, and warnings
+    // autoDismiss nil = stays until next word boundary (best for fast typing)
+    func showBadge(text: NSAttributedString, autoDismiss: TimeInterval? = nil,
+                   bgOverride: NSColor? = nil) {
         hideTimer?.invalidate()
         hasShadow = true
         let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        let bg = dark ? NSColor(white: 0.12, alpha: 0.93) : NSColor(white: 0.96, alpha: 0.97)
+        let defaultBg = dark ? NSColor(white: 0.12, alpha: 0.95) : NSColor(white: 0.94, alpha: 0.97)
+        let bg = bgOverride ?? defaultBg
         contentView?.layer?.backgroundColor = bg.cgColor
-        contentView?.layer?.cornerRadius = 7
+        contentView?.layer?.cornerRadius = 8
 
         label.attributedStringValue = text
         label.sizeToFit()
-        let w = label.frame.width + 20
-        let h: CGFloat = 28
+        let w = label.frame.width + 24
+        let h: CGFloat = 34          // taller = easier to see at speed
         setContentSize(NSSize(width: w, height: h))
-        label.frame = NSRect(x: 10, y: (h - label.frame.height) / 2,
+        label.frame = NSRect(x: 12, y: (h - label.frame.height) / 2,
                              width: label.frame.width, height: label.frame.height)
 
         var origin = badgeOrigin(windowWidth: w, windowHeight: h)
-        // Clamp to screen
         if let scr = NSScreen.main?.visibleFrame {
             origin.x = min(max(origin.x, scr.minX + 4), scr.maxX - w - 4)
             origin.y = max(origin.y, scr.minY + 4)
@@ -327,7 +330,7 @@ func makeSuggestionBadge(word: String, typed: String, prefix: String) -> NSAttri
     let str = NSMutableAttributedString()
     str.append(NSAttributedString(string: prefix + " ", attributes: [
         .foregroundColor: NSColor.secondaryLabelColor,
-        .font: NSFont.systemFont(ofSize: 11, weight: .light)
+        .font: NSFont.systemFont(ofSize: 12, weight: .light)
     ]))
     let lower = typed.lowercased()
     var used = IndexSet(); var si = word.lowercased().startIndex
@@ -340,7 +343,7 @@ func makeSuggestionBadge(word: String, typed: String, prefix: String) -> NSAttri
     for (i, ch) in word.enumerated() {
         str.append(NSAttributedString(string: String(ch), attributes: [
             .foregroundColor: used.contains(i) ? NSColor.labelColor : NSColor.secondaryLabelColor,
-            .font: NSFont.systemFont(ofSize: 13, weight: used.contains(i) ? .semibold : .regular)
+            .font: NSFont.systemFont(ofSize: 15, weight: used.contains(i) ? .semibold : .regular)
         ]))
     }
     return str
@@ -351,10 +354,28 @@ func makeAutoCorrectedBadge(original: String, corrected: String) -> NSAttributed
     let light: [NSAttributedString.Key: Any] = [.foregroundColor: NSColor.secondaryLabelColor,
                                                  .font: NSFont.systemFont(ofSize: 12, weight: .regular)]
     let bold: [NSAttributedString.Key: Any]  = [.foregroundColor: NSColor.labelColor,
-                                                 .font: NSFont.systemFont(ofSize: 13, weight: .semibold)]
+                                                 .font: NSFont.systemFont(ofSize: 15, weight: .semibold)]
     str.append(NSAttributedString(string: "✦ ", attributes: light))
     str.append(NSAttributedString(string: corrected, attributes: bold))
-    str.append(NSAttributedString(string: "  ↩ to undo", attributes: light))
+    str.append(NSAttributedString(string: "  ↩ undo", attributes: light))
+    return str
+}
+
+// Shown when 5+ chars typed and no dictionary match found — "you're making a mistake"
+func makeWarningBadge(typed: String) -> NSAttributedString {
+    let str = NSMutableAttributedString()
+    str.append(NSAttributedString(string: "⚠ ", attributes: [
+        .foregroundColor: NSColor(red: 1, green: 0.6, blue: 0, alpha: 1),
+        .font: NSFont.systemFont(ofSize: 13, weight: .semibold)
+    ]))
+    str.append(NSAttributedString(string: typed, attributes: [
+        .foregroundColor: NSColor.labelColor,
+        .font: NSFont.systemFont(ofSize: 15, weight: .regular)
+    ]))
+    str.append(NSAttributedString(string: " ?", attributes: [
+        .foregroundColor: NSColor.secondaryLabelColor,
+        .font: NSFont.systemFont(ofSize: 13, weight: .light)
+    ]))
     return str
 }
 
@@ -528,7 +549,9 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
             }
             DispatchQueue.main.async {
                 let badge = makeAutoCorrectedBadge(original: typed, corrected: corrected)
-                ghost.showBadge(text: badge, autoDismiss: 2.5)
+                // No auto-dismiss — stays until next word starts
+                // Fast typist will glance at it between words
+                ghost.showBadge(text: badge)
                 // Store for undo
                 lastAutoCorrect   = AutoCorrectRecord(original: typed, corrected: corrected)
                 justAutoCorrected = true
@@ -561,11 +584,22 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
     let chars = String(uBuf.prefix(uLen).compactMap { UnicodeScalar($0).map(Character.init) })
 
     if chars.count == 1, let ch = chars.first, ch.isLetter {
-        justAutoCorrected = false   // any new letter clears undo window
+        justAutoCorrected = false
         wordBuffer.append(ch)
         if let m = bestMatch(for: wordBuffer) {
-            let s = wordBuffer; DispatchQueue.main.async { showSuggestion(match: m, typed: s) }
-        } else { DispatchQueue.main.async { ghost.hide() } }
+            let s = wordBuffer
+            DispatchQueue.main.async { showSuggestion(match: m, typed: s) }
+        } else if wordBuffer.count >= 5 {
+            // 5+ chars with no match = likely a typo in progress — warn the user
+            let s = wordBuffer
+            DispatchQueue.main.async {
+                let warn = makeWarningBadge(typed: s)
+                ghost.showBadge(text: warn,
+                                bgOverride: NSColor(red: 0.9, green: 0.5, blue: 0.1, alpha: 0.15))
+            }
+        } else {
+            DispatchQueue.main.async { ghost.hide() }
+        }
         return Unmanaged.passRetained(event)
     }
 
