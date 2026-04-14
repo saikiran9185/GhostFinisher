@@ -1,6 +1,7 @@
 import Cocoa
 import ApplicationServices
 import ServiceManagement
+import IOKit.pwr_mgt
 
 // MARK: - Dictionary
 var personalDictionary: [String] = [
@@ -39,6 +40,14 @@ let englishDictionary: [String] = [
     "occurrence","beginning","environment","government","immediately","knowledge",
     "particularly","unfortunately","professional","international","communication",
     "development","experience","information","opportunity","organization","understanding",
+    "because","different","through","people","should","about","every","before",
+    "working","writing","getting","putting","making","taking","coming","going",
+    "their","there","here","where","which","while","would","could","should",
+    "actually","usually","probably","quickly","really","easily","clearly",
+    "everything","something","anything","nothing","someone","anyone","everyone",
+    "another","whether","whatever","however","together","although","therefore",
+    "always","never","often","sometimes","already","still","even","just","also",
+    "notion","figma","illustrator","photoshop","blender","animation","design",
     "everything","something","someone","nothing","everyone","anyone","somewhere",
     "themselves","ourselves","yourself","himself","herself","together","without",
     "through","although","because","however","therefore","whenever","wherever",
@@ -61,6 +70,147 @@ let englishDictionary: [String] = [
 ]
 
 var ghostDictionary: [String] { personalDictionary + englishDictionary }
+
+// MARK: - Typo map  (checked first — instant, no fuzzy math needed)
+// 300+ most common English misspellings → correct form
+let typoMap: [String: String] = [
+    // A
+    "abotu":"about","abscence":"absence","absense":"absence","accomodate":"accommodate",
+    "acheive":"achieve","acheiving":"achieving","acn":"can","acomplish":"accomplish",
+    "acomodate":"accommodate","acquaintence":"acquaintance","acrage":"acreage",
+    "adress":"address","adn":"and","affort":"afford","agian":"again","agknowledge":"acknowledge",
+    "ahppen":"happen","ahve":"have","alcohal":"alcohol","almsot":"almost","alot":"a lot",
+    "alreayd":"already","alright":"all right","alwasy":"always","amature":"amateur",
+    "ambivilent":"ambivalent","amzing":"amazing","anbd":"and","anual":"annual",
+    "anyoen":"anyone","appauling":"appalling","apparantly":"apparently","appearence":"appearance",
+    "appriciate":"appreciate","aquire":"acquire","arguement":"argument","arround":"around",
+    "articel":"article","asap":"asap","assasinate":"assassinate","asside":"aside",
+    "aswell":"as well","atain":"attain","athiest":"atheist","athority":"authority",
+    "autamatically":"automatically","automaticaly":"automatically","auxillary":"auxiliary",
+    // B
+    "bakc":"back","basicaly":"basically","basicly":"basically","becasue":"because",
+    "becuase":"because","becomeing":"becoming","befoer":"before","begining":"beginning",
+    "beleive":"believe","belive":"believe","benifit":"benefit","buisness":"business",
+    "buliding":"building","buton":"button","beutiful":"beautiful","buetiful":"beautiful",
+    // C
+    "calender":"calendar","caluclate":"calculate","camoflage":"camouflage","cant":"can't",
+    "catagory":"category","caugh":"caught","challange":"challenge","changeing":"changing",
+    "charachter":"character","charactor":"character","cheif":"chief","cieling":"ceiling",
+    "collegue":"colleague","comback":"comeback","comming":"coming","comittee":"committee",
+    "commited":"committed","commitee":"committee","compatable":"compatible",
+    "compitent":"competent","completly":"completely","concious":"conscious",
+    "condescending":"condescending","congradulations":"congratulations",
+    "consistant":"consistent","controll":"control","convienient":"convenient",
+    "copywrite":"copyright","couldnt":"couldn't","coverd":"covered","critisism":"criticism",
+    "currant":"current","cusotmer":"customer",
+    // D
+    "daed":"dead","dael":"deal","daes":"does","definitly":"definitely","definately":"definitely",
+    "dependant":"dependent","descrption":"description","dieing":"dying","diffrence":"difference",
+    "dilema":"dilemma","dilemna":"dilemma","dissapoint":"disappoint","doesnt":"doesn't",
+    "doign":"doing","dont":"don't","downlaod":"download","duing":"during","dupicate":"duplicate",
+    // E
+    "eagre":"eager","eigth":"eighth","embarass":"embarrass","embarrasing":"embarrassing",
+    "eminate":"emanate","emmit":"emit","enviroment":"environment","equiped":"equipped",
+    "esential":"essential","excede":"exceed","existance":"existence","expecially":"especially",
+    "experiance":"experience","experince":"experience","explict":"explicit","expresion":"expression",
+    "extemely":"extremely","extention":"extension",
+    // F
+    "familliar":"familiar","fasle":"false","favorate":"favorite","favourate":"favourite",
+    "fianlly":"finally","filetr":"filter","finaly":"finally","florescent":"fluorescent",
+    "focuss":"focus","foriegn":"foreign","forseeable":"foreseeable","freind":"friend",
+    "frmo":"from","fromthe":"from the","futher":"further",
+    // G
+    "gaurantee":"guarantee","geting":"getting","goverment":"government","grammer":"grammar",
+    "greatful":"grateful","guarentee":"guarantee","guidence":"guidance",
+    // H
+    "haev":"have","happend":"happened","hapening":"happening","harrassment":"harassment",
+    "heigth":"height","hapen":"happen","havnt":"haven't","heirarchy":"hierarchy",
+    "helpfull":"helpful","hge":"huge","hierachry":"hierarchy","hisself":"himself",
+    "hobbies":"hobbies","hopefuly":"hopefully","horizantal":"horizontal","howver":"however",
+    // I
+    "ignorence":"ignorance","ilegal":"illegal","imaginery":"imaginary","imediately":"immediately",
+    "imeadiatly":"immediately","immedietly":"immediately","immeditly":"immediately",
+    "implemnt":"implement","importent":"important","imposible":"impossible",
+    "impresive":"impressive","inadvertant":"inadvertent","incase":"in case",
+    "incidently":"incidentally","independance":"independence","indispensible":"indispensable",
+    "infered":"inferred","interupt":"interrupt","intresting":"interesting",
+    "irregardless":"regardless","irresistable":"irresistible",
+    "isnt":"isn't","itms":"items",
+    // J K L
+    "judgement":"judgment","knowlege":"knowledge","knwo":"know","laguage":"language",
+    "langauge":"language","laready":"already","leanr":"learn","learnign":"learning",
+    "leathr":"leather","lenght":"length","liasion":"liaison","libary":"library",
+    "lisense":"license","litle":"little","litrally":"literally","loosing":"losing",
+    // M
+    "maintance":"maintenance","maintenence":"maintenance","managment":"management",
+    "maufacture":"manufacture","medically":"medically","memeber":"member",
+    "mesage":"message","millenia":"millennia","millenium":"millennium","mispell":"misspell",
+    "mroe":"more","myslef":"myself",
+    // N
+    "necesary":"necessary","neccessary":"necessary","negociate":"negotiate",
+    "noticable":"noticeable","nowdays":"nowadays","nuisanse":"nuisance",
+    // O
+    "occured":"occurred","occurence":"occurrence","occurance":"occurrence",
+    "ofcourse":"of course","offical":"official","omision":"omission","omitt":"omit",
+    "onece":"once","optinal":"optional","orginize":"organize","orignal":"original",
+    "ouput":"output","overide":"override","ovelap":"overlap",
+    // P
+    "paralel":"parallel","peice":"piece","peolpe":"people","percieve":"perceive",
+    "performace":"performance","permenant":"permanent","persevearance":"perseverance",
+    "persistance":"persistence","personel":"personnel","plateu":"plateau","playright":"playwright",
+    "posible":"possible","pospone":"postpone","practise":"practice","preceed":"precede",
+    "prefered":"preferred","prepair":"prepare","privelege":"privilege","priviledge":"privilege",
+    "probelm":"problem","proceeed":"proceed","proffesional":"professional",
+    "programing":"programming","pronounciation":"pronunciation","publically":"publicly",
+    // Q R
+    "questionaire":"questionnaire","realy":"really","recieve":"receive",
+    "reccomend":"recommend","recomend":"recommend","recurrring":"recurring",
+    "referance":"reference","relevent":"relevant","remeber":"remember",
+    "repitition":"repetition","reposnd":"respond","resposne":"response",
+    "retreive":"retrieve","rythm":"rhythm",
+    // S
+    "sacrifise":"sacrifice","saftey":"safety","saveing":"saving","secratary":"secretary",
+    "seperate":"separate","sepearte":"separate","seprate":"separate",
+    "simalar":"similar","similer":"similar","simalr":"similar",
+    "sinse":"since","skillset":"skill set","soem":"some","somthing":"something",
+    "speach":"speech","specifally":"specifically","statment":"statement",
+    "strech":"stretch","studing":"studying","succesful":"successful","succesfull":"successful",
+    "suttle":"subtle","sytem":"system",
+    // T
+    "tahn":"than","taht":"that","teh":"the","thats":"that's","thay":"they",
+    "thier":"their","thign":"thing","thigns":"things","thsi":"this",
+    "tommorow":"tomorrow","tomorrrow":"tomorrow","tounge":"tongue","truely":"truly",
+    "typo":"typo","tyranny":"tyranny",
+    // U V W
+    "unforseen":"unforeseen","unfortunatly":"unfortunately","untill":"until",
+    "usefull":"useful","vrey":"very","visable":"visible","waht":"what",
+    "whcih":"which","wher":"where","whith":"with","wierd":"weird","wieth":"with",
+    "wirte":"write","wnat":"want","wnated":"wanted","wokring":"working","wordl":"world",
+    "wroking":"working","woudl":"would","wouldnt":"wouldn't","writting":"writing",
+    "wrogn":"wrong",
+    // Y
+    "yoru":"your","youre":"you're","ytou":"you","yuor":"your",
+]
+
+// MARK: - Caffeine (prevent display sleep)
+var caffeineAssertionID: IOPMAssertionID = 0
+var isCaffeinated = false
+
+func enableCaffeine() {
+    guard !isCaffeinated else { return }
+    let reason = "GhostFinisher caffeine" as CFString
+    let result = IOPMAssertionCreateWithName(kIOPMAssertionTypeNoDisplaySleep as CFString,
+                                             IOPMAssertionLevel(kIOPMAssertionLevelOn),
+                                             reason, &caffeineAssertionID)
+    isCaffeinated = (result == kIOReturnSuccess)
+}
+
+func disableCaffeine() {
+    guard isCaffeinated else { return }
+    IOPMAssertionRelease(caffeineAssertionID)
+    caffeineAssertionID = 0
+    isCaffeinated = false
+}
 
 // MARK: - State
 var wordBuffer       = ""
@@ -135,22 +285,21 @@ func bestMatch(for input: String) -> MatchKind? {
 }
 
 // Auto-correct candidate when the user finishes a word (hits space/punctuation)
-// More conservative than live match — only corrects clear misspellings
 func autoCorrectCandidate(for input: String) -> String? {
-    guard input.count >= 3 else { return nil }
+    guard input.count >= 2 else { return nil }
     let lower = input.lowercased()
-    // Already a valid word — don't touch it
+    // 1 — Explicit typo map: instant lookup, highest confidence
+    if let fix = typoMap[lower] { return fix }
+    // 2 — Already a valid word — don't touch it
     if ghostDictionary.contains(where: { $0.lowercased() == lower }) { return nil }
-    // Find closest word at distance ≤ 2
+    // 3 — Fuzzy Levenshtein fallback for words not in the typo map
+    guard input.count >= 3 else { return nil }
     var bestDist = 3; var bestWord: String?
     for word in ghostDictionary {
         guard abs(word.count - input.count) <= 2 else { continue }
         let d = editDistance(lower, word, cap: 2)
         if d < bestDist { bestDist = d; bestWord = word }
     }
-    // Auto-correct both distance 1 AND distance 2
-    // Distance 1: "wroking" → "working"   (1 transposition)
-    // Distance 2: "buetiful" → "beautiful" (2 edits)
     if let w = bestWord, bestDist <= 2 { return w }
     return nil
 }
@@ -159,10 +308,11 @@ func autoCorrectCandidate(for input: String) -> String? {
 // Returns the screen position just below the text cursor.
 // Tries 4 sources in order of precision.
 func badgeOrigin(windowWidth: CGFloat = 200, windowHeight: CGFloat = 28) -> NSPoint {
-    // 1 — exact caret bounds via AX
+    // 1 — exact caret bounds via AX — place badge just ABOVE the line so eyes
+    //     don't need to travel far from the text being typed
     if let rect = caretRect() {
         let (pt, lineH) = nsFlip(rect)
-        return NSPoint(x: pt.x, y: pt.y - lineH - 6)
+        return NSPoint(x: pt.x, y: pt.y + lineH + 4)
     }
     // 2 — focused element frame (Illustrator layer rename, text tool, etc.)
     if let rect = focusedElementRect() {
@@ -281,6 +431,38 @@ class GhostWindow: NSPanel {
         orderFront(nil)
     }
 
+    // Inline correction — shown at cursor for spell/fuzzy matches in amber so
+    // it's visible in peripheral vision without the user looking away from text.
+    func showInlineCorrection(word: String, caret: CGRect) {
+        hideTimer?.invalidate()
+        contentView?.layer?.backgroundColor = .none
+        contentView?.layer?.cornerRadius = 0
+        hasShadow = false
+        let (origin, lineH) = nsFlip(caret)
+        let fontSize = caretFontSize()
+        let str = NSMutableAttributedString()
+        str.append(NSAttributedString(string: " → ", attributes: [
+            .foregroundColor: NSColor(red: 1.0, green: 0.55, blue: 0.0, alpha: 0.75),
+            .font: NSFont.systemFont(ofSize: fontSize * 0.85, weight: .regular)
+        ]))
+        str.append(NSAttributedString(string: word, attributes: [
+            .foregroundColor: NSColor(red: 1.0, green: 0.55, blue: 0.0, alpha: 0.85),
+            .font: NSFont.systemFont(ofSize: fontSize, weight: .semibold)
+        ]))
+        str.append(NSAttributedString(string: "  ⇥", attributes: [
+            .foregroundColor: NSColor(red: 1.0, green: 0.55, blue: 0.0, alpha: 0.50),
+            .font: NSFont.systemFont(ofSize: fontSize * 0.80, weight: .light)
+        ]))
+        label.attributedStringValue = str
+        label.sizeToFit()
+        let w = label.frame.width + 2
+        let h = max(lineH, fontSize + 4)
+        setContentSize(NSSize(width: w, height: h))
+        setFrameOrigin(NSPoint(x: origin.x, y: origin.y + (h - fontSize) * 0.5))
+        label.frame = NSRect(x: 0, y: 0, width: w, height: h)
+        orderFront(nil)
+    }
+
     // Badge — suggestions, corrections, and warnings
     // autoDismiss nil = stays until next word boundary (best for fast typing)
     func showBadge(text: NSAttributedString, autoDismiss: TimeInterval? = nil,
@@ -386,9 +568,12 @@ func showSuggestion(match: MatchKind, typed: String) {
         if let rect = caretRect() { ghost.showInline(tail: tail, caret: rect) }
         else { ghost.showBadge(text: makeSuggestionBadge(word: word, typed: typed, prefix: "⇥")) }
     case .spell(let word):
-        ghost.showBadge(text: makeSuggestionBadge(word: word, typed: typed, prefix: "✦"))
+        // Prefer inline at cursor so it's visible without looking away from text
+        if let rect = caretRect() { ghost.showInlineCorrection(word: word, caret: rect) }
+        else { ghost.showBadge(text: makeSuggestionBadge(word: word, typed: typed, prefix: "✦")) }
     case .fuzzy(let word):
-        ghost.showBadge(text: makeSuggestionBadge(word: word, typed: typed, prefix: "⇥"))
+        if let rect = caretRect() { ghost.showInlineCorrection(word: word, caret: rect) }
+        else { ghost.showBadge(text: makeSuggestionBadge(word: word, typed: typed, prefix: "⇥")) }
     }
 }
 
@@ -422,7 +607,7 @@ func acceptMatch(_ match: MatchKind, typedCount: Int) {
         typeString(tail)                     // only inject the tail — instant, no sleep needed
     case .spell(let word), .fuzzy(let word):
         deleteChars(typedCount)
-        Thread.sleep(forTimeInterval: 0.005)
+        Thread.sleep(forTimeInterval: 0.020) // 20ms — enough for Electron/Notion to catch up
         typeString(word)
     }
 }
@@ -430,6 +615,8 @@ func acceptMatch(_ match: MatchKind, typedCount: Int) {
 // MARK: - Menu Bar
 class MenuBarController: NSObject {
     var item: NSStatusItem!
+    var caffeineItem: NSMenuItem!
+
     override init() {
         super.init()
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -440,19 +627,34 @@ class MenuBarController: NSObject {
         toggle.target = self
         menu.addItem(toggle)
         menu.addItem(.separator())
+        caffeineItem = NSMenuItem(title: "☕ Caffeine: Off", action: #selector(toggleCaffeine), keyEquivalent: "")
+        caffeineItem.target = self
+        menu.addItem(caffeineItem)
+        menu.addItem(.separator())
         let add = NSMenuItem(title: "Add clipboard word to dictionary", action: #selector(addWord), keyEquivalent: "")
         add.target = self; menu.addItem(add)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Ghost Finisher", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         item.menu = menu
+        // Auto-enable caffeine on launch
+        enableCaffeine()
+        updateCaffeineItem()
     }
     func updateIcon() {
         item.button?.title   = isEnabled ? "👻" : "💤"
         item.button?.toolTip = isEnabled ? "Ghost Finisher active — ⌘⇧G to pause" : "Ghost Finisher paused — ⌘⇧G to resume"
         (item.menu?.items.first)?.title = isEnabled ? "Pause Ghost Finisher" : "Resume Ghost Finisher"
     }
+    func updateCaffeineItem() {
+        caffeineItem?.title = isCaffeinated ? "☕ Caffeine: On — display won't sleep" : "☕ Caffeine: Off"
+        caffeineItem?.state = isCaffeinated ? .on : .off
+    }
     @objc func toggleEnabled() {
         isEnabled.toggle(); wordBuffer = ""; ghost.hide(); updateIcon()
+    }
+    @objc func toggleCaffeine() {
+        if isCaffeinated { disableCaffeine() } else { enableCaffeine() }
+        updateCaffeineItem()
     }
     @objc func addWord() {
         guard let w = NSPasteboard.general.string(forType: .string)?
@@ -503,7 +705,7 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
             DispatchQueue.global(qos: .userInteractive).async {
                 // Delete corrected word + the space we injected
                 deleteChars(corrected.count + 1)
-                Thread.sleep(forTimeInterval: 0.005)
+                Thread.sleep(forTimeInterval: 0.020)
                 typeString(original)   // put the original typo back
             }
             return nil  // consume this backspace
@@ -530,34 +732,36 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
     }
 
     // ── Space / Return / Punctuation — word boundary + auto-correct ───────
-    // keyCodes: space=49, return=36, .=47, ,=43, ;=41, :=39, !=--, ?=--
+    // keyCodes: space=49, return=36, .=47, ,=43, ;=41, :=39
     let isBoundary = keyCode == 49 || keyCode == 36 || keyCode == 47 ||
                      keyCode == 43 || keyCode == 41 || keyCode == 39
     if isBoundary && !wordBuffer.isEmpty {
-        let typed = wordBuffer
+        let typed    = wordBuffer
+        let boundaryCode = keyCode
         wordBuffer        = ""
         justAutoCorrected = false
         lastAutoCorrect   = nil
 
         if let corrected = autoCorrectCandidate(for: typed) {
-            // Auto-correct: delete the typo, type the correct word, then let the space through
+            // Consume the boundary key — we will re-inject it ourselves after the
+            // corrected word. This means we never have a timing race where the
+            // boundary is already in the text when we start deleting.
             DispatchQueue.main.async { ghost.hide() }
             DispatchQueue.global(qos: .userInteractive).async {
+                Thread.sleep(forTimeInterval: 0.010)
                 deleteChars(typed.count)
-                Thread.sleep(forTimeInterval: 0.005)
+                Thread.sleep(forTimeInterval: 0.020)
                 typeString(corrected)
+                // Re-inject the original boundary (space, period, comma, etc.)
+                postKey(keyCode: CGKeyCode(boundaryCode), shift: false)
             }
             DispatchQueue.main.async {
                 let badge = makeAutoCorrectedBadge(original: typed, corrected: corrected)
-                // No auto-dismiss — stays until next word starts
-                // Fast typist will glance at it between words
                 ghost.showBadge(text: badge)
-                // Store for undo
                 lastAutoCorrect   = AutoCorrectRecord(original: typed, corrected: corrected)
                 justAutoCorrected = true
             }
-            // Let the space/punctuation through so it lands after our corrected word
-            return Unmanaged.passRetained(event)
+            return nil  // consume — we re-inject the boundary ourselves
         }
 
         DispatchQueue.main.async { ghost.hide() }
@@ -618,6 +822,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         _ = AXIsProcessTrustedWithOptions(opts)
         startEventTap()
         if #available(macOS 13.0, *) { try? SMAppService.mainApp.register() }
+    }
+    func applicationWillTerminate(_ n: Notification) {
+        disableCaffeine()
     }
     func startEventTap() {
         let mask: CGEventMask = 1 << CGEventType.keyDown.rawValue

@@ -8,6 +8,7 @@ swiftc \
   -framework Cocoa \
   -framework ApplicationServices \
   -framework ServiceManagement \
+  -framework IOKit \
   Sources/GhostFinisher.swift \
   -o GhostFinisher
 
